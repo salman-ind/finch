@@ -41,7 +41,7 @@ button { font-family: inherit; cursor: pointer; -webkit-tap-highlight-color: tra
 button:active { opacity: 0.65; transform: scale(0.97); }
 input  { font-family: inherit; -webkit-appearance: none; background: transparent; color: #1a1a1a; }
 .serif { font-family: 'Playfair Display', serif; }
-#app   { max-width: 440px; margin: 0 auto; min-height: 100vh; position: relative; }
+#app   { width: 100%; min-height: 100vh; position: relative; }
 
 .tab-bar { display: flex; border-bottom: 0.5px solid var(--border); overflow-x: auto; scrollbar-width: none; }
 .tab-bar::-webkit-scrollbar { display: none; }
@@ -56,7 +56,7 @@ input  { font-family: inherit; -webkit-appearance: none; background: transparent
 .icon-btn { width: 32px; height: 32px; border-radius: 50%; border: 0.5px solid var(--border2); background: none; font-size: 16px; color: var(--text2); display: flex; align-items: center; justify-content: center; }
 
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.40); display: flex; align-items: flex-end; justify-content: center; z-index: 200; animation: fadeIn 0.15s ease; }
-.modal-card { background: #ffffff; border-radius: 20px 20px 0 0; padding: 22px 20px 40px; width: 100%; max-width: 440px; max-height: 90vh; overflow-y: auto; animation: slideUp 0.22s ease; }
+.modal-card { background: #ffffff; border-radius: 20px 20px 0 0; padding: 22px 20px 40px; width: 100%; max-height: 90vh; overflow-y: auto; animation: slideUp 0.22s ease; }
 @keyframes fadeIn  { from { opacity: 0 }                         to { opacity: 1 } }
 @keyframes slideUp { from { transform: translateY(22px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
 
@@ -87,12 +87,12 @@ input  { font-family: inherit; -webkit-appearance: none; background: transparent
 <div id="app"></div>
 <div id="install-banner">
   <div>
-    <div style="font-weight:500;font-size:14px;margin-bottom:2px">Add Finch to home screen</div>
-    <div style="font-size:12px;opacity:0.6">Use it like a native app, no browser bar</div>
+    <div style="font-weight:500;font-size:16px;margin-bottom:2px">Add Finch to home screen</div>
+    <div style="font-size:14px;opacity:0.6">Use it like a native app, no browser bar</div>
   </div>
   <div style="display:flex;gap:8px;flex-shrink:0">
-    <button id="banner-later" style="padding:8px 14px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.28);background:transparent;color:#ffffff;font-size:13px;font-family:inherit">Later</button>
-    <button id="install-btn"  style="padding:8px 14px;border-radius:8px;border:none;background:#ffffff;color:#1a1a1a;font-size:13px;font-weight:500;font-family:inherit">Install</button>
+    <button id="banner-later" style="padding:8px 14px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.28);background:transparent;color:#ffffff;font-size:15px;font-family:inherit">Later</button>
+    <button id="install-btn"  style="padding:8px 14px;border-radius:8px;border:none;background:#ffffff;color:#1a1a1a;font-size:15px;font-weight:500;font-family:inherit">Install</button>
   </div>
 </div>
 
@@ -128,7 +128,7 @@ let APP   = {budgets:{},transactions:[]};
 let SYNC  = {token:ls.get('finch_gh_token')||'',gistId:ls.get('finch_gh_gist')||'',status:'idle',lastSaved:null};
 let STATE = {
   curMonth:mkKey(new Date()),modal:null,
-  amount:null,pendingCat:null,noteInput:'',
+  amount:null,pendingCat:null,noteInput:'',dateInput:new Date().toISOString().split('T')[0],
   viewTx:null,tab:'tx',
   budgetInput:'',calcExpr:'',calcDisp:'0',
   tokenInput:'',setupError:'',setupLoading:false,dataMsg:'',
@@ -171,9 +171,9 @@ async function ghSave(){
 }
 function updateSyncDot(){
   const el=document.getElementById('sync-row');if(!el)return;
-  if(SYNC.status==='syncing') el.innerHTML=`<span class="sync-dot syncing" style="background:#BA7517"></span><span style="font-size:10px;color:#6b6b68">Syncing&hellip;</span>`;
-  else if(SYNC.status==='synced') el.innerHTML=`<span class="sync-dot" style="background:#1D9E75"></span><span style="font-size:10px;color:#6b6b68">Saved to GitHub</span>`;
-  else if(SYNC.status==='error') el.innerHTML=`<span class="sync-dot" style="background:#E24B4A"></span><span style="font-size:10px;color:#c0392b">Sync failed</span>`;
+  if(SYNC.status==='syncing') el.innerHTML=`<span class="sync-dot syncing" style="background:#BA7517"></span><span style="font-size:12px;color:#6b6b68">Syncing&hellip;</span>`;
+  else if(SYNC.status==='synced') el.innerHTML=`<span class="sync-dot" style="background:#1D9E75"></span><span style="font-size:12px;color:#6b6b68">Saved to GitHub</span>`;
+  else if(SYNC.status==='error') el.innerHTML=`<span class="sync-dot" style="background:#E24B4A"></span><span style="font-size:12px;color:#c0392b">Sync failed</span>`;
 }
 function exportBackup(){
   try{
@@ -231,18 +231,25 @@ async function forceSync(){
 
 // ── State helpers ─────────────────────────────────────────────
 function setState(p){Object.assign(STATE,p);render();}
-function closeModal(){setState({modal:null,viewTx:null,pendingCat:null,noteInput:'',dataMsg:''});}
+function closeModal(){setState({modal:null,viewTx:null,pendingCat:null,noteInput:'',dateInput:new Date().toISOString().split('T')[0],dataMsg:''});}
 
 function calcPress(v){
   const ops=['+','-','*','/'];let e=STATE.calcExpr;
-  if(v==='C'){setState({calcExpr:'',calcDisp:'0'});return;}
-  if(v==='DEL'){const ne=e.slice(0,-1);setState({calcExpr:ne,calcDisp:ne||'0'});return;}
-  if(v==='='){
-    try{const r=Function('"use strict";return('+e+')')();if(!isNaN(r)&&isFinite(r)){const rv=Math.round(r*100)/100;setState({calcExpr:String(rv),calcDisp:String(rv)});}}catch(ex){}return;
+  let ne=e,nd=STATE.calcDisp;
+  if(v==='C'){ne='';nd='0';}
+  else if(v==='DEL'){ne=e.slice(0,-1);nd=ne||'0';}
+  else if(v==='='){
+    try{const r=Function('"use strict";return('+e+')')();if(!isNaN(r)&&isFinite(r)){const rv=Math.round(r*100)/100;ne=String(rv);nd=String(rv);}}catch(ex){}
+  } else if(ops.includes(v)){
+    if(!e)return;ne=ops.includes(e.slice(-1))?e.slice(0,-1)+v:e+v;nd=ne;
+  } else {
+    if(v==='.'){const pts=e.split(/[+\-*/]/);if(pts[pts.length-1].includes('.'))return;}
+    ne=e+v;nd=ne;
   }
-  if(ops.includes(v)){if(!e)return;const ne=ops.includes(e.slice(-1))?e.slice(0,-1)+v:e+v;setState({calcExpr:ne,calcDisp:ne});return;}
-  if(v==='.'){const pts=e.split(/[+\-*/]/);if(pts[pts.length-1].includes('.'))return;}
-  setState({calcExpr:e+v,calcDisp:e+v});
+  STATE.calcExpr=ne;STATE.calcDisp=nd;
+  // Update only the display element — no full re-render, no flash
+  const el=document.getElementById('calc-disp');
+  if(el)el.textContent=nd;
 }
 function calcOk(){
   let v;try{v=Function('"use strict";return('+STATE.calcExpr+')')();}catch(ex){v=parseFloat(STATE.calcDisp);}
@@ -250,9 +257,10 @@ function calcOk(){
 }
 function pickCat(id){setState({pendingCat:id,modal:'notes',noteInput:''});}
 async function addTx(){
-  const now=new Date();
-  APP.transactions.push({id:String(Date.now()),amount:STATE.amount,category:STATE.pendingCat,date:now.toISOString().split('T')[0],month:mkKey(now),ts:Date.now(),note:STATE.noteInput.trim()});
-  await saveData();setState({modal:null,amount:null,pendingCat:null,noteInput:'',curMonth:mkKey(now),tab:'tx'});
+  const d=new Date(STATE.dateInput+'T12:00');
+  const monthKey=mkKey(d);
+  APP.transactions.push({id:String(Date.now()),amount:STATE.amount,category:STATE.pendingCat,date:STATE.dateInput,month:monthKey,ts:Date.now(),note:STATE.noteInput.trim()});
+  await saveData();setState({modal:null,amount:null,pendingCat:null,noteInput:'',dateInput:new Date().toISOString().split('T')[0],curMonth:monthKey,tab:'tx'});
 }
 async function delTx(id){
   APP.transactions=APP.transactions.filter(t=>t.id!==id);
@@ -269,23 +277,23 @@ function getAllMonths(){const s=new Set();(APP.transactions||[]).forEach(t=>s.ad
 // ── Modals ────────────────────────────────────────────────────
 function mSetup(){return`
   <div style="text-align:center;margin-bottom:22px">
-    <div class="serif" style="font-size:28px;font-weight:300;margin-bottom:5px">Connect GitHub</div>
-    <div style="font-size:13px;color:#6b6b68">Back up your data to a private GitHub Gist</div>
+    <div class="serif" style="font-size:30px;font-weight:300;margin-bottom:5px">Connect GitHub</div>
+    <div style="font-size:15px;color:#6b6b68">Back up your data to a private GitHub Gist</div>
   </div>
-  <div style="background:#f5f4f0;border-radius:12px;padding:14px 16px;margin-bottom:18px;font-size:13px;color:#6b6b68;line-height:1.8">
+  <div style="background:#f5f4f0;border-radius:12px;padding:14px 16px;margin-bottom:18px;font-size:15px;color:#6b6b68;line-height:1.8">
     <strong style="font-weight:500;color:#1a1a1a">Get your token:</strong><br>
     1. GitHub &rarr; Settings &rarr; Developer settings<br>
     2. Personal access tokens &rarr; Tokens (classic)<br>
-    3. Generate new token &rarr; tick <code style="background:#eceae4;padding:1px 6px;border-radius:4px;font-size:11px">gist</code> scope only<br>
+    3. Generate new token &rarr; tick <code style="background:#eceae4;padding:1px 6px;border-radius:4px;font-size:13px">gist</code> scope only<br>
     4. Copy &amp; paste below
   </div>
   <input id="tok-in" type="password" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" oninput="STATE.tokenInput=this.value" onkeydown="if(event.key==='Enter')connectGitHub()"
-    style="width:100%;padding:12px 14px;border:0.5px solid rgba(0,0,0,0.2);border-radius:10px;font-size:14px;font-family:monospace;outline:none;margin-bottom:10px">
-  ${STATE.setupError?`<div style="color:#c0392b;font-size:13px;margin-bottom:10px;padding:10px 12px;background:#fdf0ef;border-radius:8px">${esc(STATE.setupError)}</div>`:''}
+    style="width:100%;padding:12px 14px;border:0.5px solid rgba(0,0,0,0.2);border-radius:10px;font-size:16px;font-family:monospace;outline:none;margin-bottom:10px">
+  ${STATE.setupError?`<div style="color:#c0392b;font-size:15px;margin-bottom:10px;padding:10px 12px;background:#fdf0ef;border-radius:8px">${esc(STATE.setupError)}</div>`:''}
   <button class="primary-btn" onclick="connectGitHub()" ${STATE.setupLoading?'disabled':''} style="${STATE.setupLoading?'opacity:0.6':''}">
     ${STATE.setupLoading?'Connecting&hellip;':'Connect to GitHub &rarr;'}
   </button>
-  <button onclick="closeModal()" style="width:100%;padding:10px;background:none;border:none;color:#a8a8a4;font-size:13px;margin-top:6px;font-family:inherit">Skip for now</button>`;}
+  <button onclick="closeModal()" style="width:100%;padding:10px;background:none;border:none;color:#a8a8a4;font-size:15px;margin-top:6px;font-family:inherit">Skip for now</button>`;}
 
 function mCalc(){
   const grid=[
@@ -294,9 +302,9 @@ function mCalc(){
     [{l:'4',v:'4'},{l:'5',v:'5'},{l:'6',v:'6'},{l:'+',v:'+',fg:'#378ADD',bg:'#f5f4f0'}],
     [{l:'1',v:'1'},{l:'2',v:'2'},{l:'3',v:'3'},{l:'.',v:'.'}],
   ];
-  return`<h2 class="serif" style="font-size:20px;font-weight:400;margin-bottom:14px">Add expense</h2>
+  return`<h2 class="serif" style="font-size:22px;font-weight:400;margin-bottom:14px">Add expense</h2>
   <div style="background:#f5f4f0;border-radius:10px;padding:14px 16px;margin-bottom:12px;text-align:right;min-height:60px;display:flex;align-items:center;justify-content:flex-end">
-    <span class="serif" style="font-size:32px;font-weight:300;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${STATE.calcDisp}</span>
+    <span id="calc-disp" class="serif" style="font-size:34px;font-weight:300;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${STATE.calcDisp}</span>
   </div>
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:7px">
     ${grid.map(r=>r.map(b=>`<button class="calc-btn" style="background:${b.bg||'#ffffff'};color:${b.fg||'#1a1a1a'};font-size:${b.sz||'18px'}" onclick="calcPress('${b.v}')">${b.l}</button>`).join('')).join('')}
@@ -311,41 +319,68 @@ function mCalc(){
   </div>`;}
 
 function mCat(){return`
-  <h2 class="serif" style="font-size:20px;font-weight:400;margin-bottom:4px">Category</h2>
-  <p style="font-size:13px;color:#6b6b68;margin-bottom:16px">for <span class="serif" style="font-size:17px;font-weight:300">${fmtAmt(STATE.amount)}</span></p>
+  <h2 class="serif" style="font-size:22px;font-weight:400;margin-bottom:4px">Category</h2>
+  <p style="font-size:15px;color:#6b6b68;margin-bottom:16px">for <span class="serif" style="font-size:19px;font-weight:300">${fmtAmt(STATE.amount)}</span></p>
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
     ${CATS.map(c=>`<button class="cat-btn" onclick="pickCat('${c.id}')" style="border:0.5px solid ${c.color}45;background:${c.bg}">
-      <span style="font-size:24px">${em(c.id)}</span>
-      <span style="font-size:11px;font-weight:500;color:${c.color}">${c.label}</span>
+      <span style="font-size:26px">${em(c.id)}</span>
+      <span style="font-size:13px;font-weight:500;color:${c.color}">${c.label}</span>
     </button>`).join('')}
   </div>
-  <button onclick="setState({modal:'calc'})" style="margin-top:12px;width:100%;padding:8px;background:none;border:none;color:#a8a8a4;font-size:13px;font-family:inherit">&larr; back</button>`;}
+  <button onclick="setState({modal:'calc'})" style="margin-top:12px;width:100%;padding:8px;background:none;border:none;color:#a8a8a4;font-size:15px;font-family:inherit">&larr; back</button>`;}
 
 function mNotes(){
   const cat=getCat(STATE.pendingCat);
-  return`<h2 class="serif" style="font-size:20px;font-weight:400;margin-bottom:16px">Add a note <span style="color:#a8a8a4;font-size:14px;font-weight:300">&mdash; optional</span></h2>
+  return`<h2 class="serif" style="font-size:22px;font-weight:400;margin-bottom:16px">Add a note <span style="color:#a8a8a4;font-size:16px;font-weight:300">&mdash; optional</span></h2>
   <div style="display:flex;align-items:center;gap:14px;padding:16px;background:${cat.bg};border-radius:12px;margin-bottom:16px">
-    <span style="font-size:34px">${em(cat.id)}</span>
+    <span style="font-size:36px">${em(cat.id)}</span>
     <div>
-      <div style="font-size:11px;color:${cat.color};font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">${cat.label}</div>
-      <div class="serif" style="font-size:26px;font-weight:300">${fmtAmt(STATE.amount)}</div>
+      <div style="font-size:13px;color:${cat.color};font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">${cat.label}</div>
+      <div class="serif" style="font-size:28px;font-weight:300">${fmtAmt(STATE.amount)}</div>
     </div>
   </div>
   <input id="note-in" type="text" placeholder="What was this for?" value="${esc(STATE.noteInput)}" oninput="STATE.noteInput=this.value" maxlength="60" onkeydown="if(event.key==='Enter')addTx()"
-    style="width:100%;padding:12px 14px;border:0.5px solid rgba(0,0,0,0.2);border-radius:10px;font-size:15px;outline:none;margin-bottom:14px">
+    style="width:100%;padding:12px 14px;border:0.5px solid rgba(0,0,0,0.2);border-radius:10px;font-size:17px;outline:none;margin-bottom:14px">
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-    <button class="secondary-btn" onclick="STATE.noteInput='';addTx()">Skip</button>
+    <button class="secondary-btn" onclick="STATE.noteInput='';setState({modal:'date'})">Skip</button>
+    <button class="primary-btn" onclick="setState({modal:'date'})">Next &rarr;</button>
+  </div>`;}
+
+function mDate(){
+  const cat=getCat(STATE.pendingCat);
+  const today=new Date().toISOString().split('T')[0];
+  const isToday=STATE.dateInput===today;
+  return`<h2 class="serif" style="font-size:22px;font-weight:400;margin-bottom:18px">When was this?</h2>
+  <div style="display:flex;align-items:center;gap:14px;padding:16px;background:${cat.bg};border-radius:12px;margin-bottom:22px">
+    <span style="font-size:36px">${em(cat.id)}</span>
+    <div>
+      <div style="font-size:13px;color:${cat.color};font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">${cat.label}</div>
+      <div class="serif" style="font-size:28px;font-weight:300">${fmtAmt(STATE.amount)}</div>
+      ${STATE.noteInput?`<div style="font-size:13px;color:#6b6b68;margin-top:3px">${esc(STATE.noteInput)}</div>`:''}
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:16px">
+    <button onclick="STATE.dateInput='${today}';render()" style="flex:1;padding:10px;border-radius:10px;border:0.5px solid ${isToday?'#1a1a1a':'rgba(0,0,0,0.2)'};background:${isToday?'#1a1a1a':'none'};color:${isToday?'#ffffff':'#1a1a1a'};font-size:15px;font-family:inherit">Today</button>
+    <button onclick="STATE.dateInput=new Date(new Date()-86400000).toISOString().split('T')[0];render()" style="flex:1;padding:10px;border-radius:10px;border:0.5px solid ${!isToday&&STATE.dateInput===new Date(new Date()-86400000).toISOString().split('T')[0]?'#1a1a1a':'rgba(0,0,0,0.2)'};background:${!isToday&&STATE.dateInput===new Date(new Date()-86400000).toISOString().split('T')[0]?'#1a1a1a':'none'};color:${!isToday&&STATE.dateInput===new Date(new Date()-86400000).toISOString().split('T')[0]?'#ffffff':'#1a1a1a'};font-size:15px;font-family:inherit">Yesterday</button>
+  </div>
+  <div style="margin-bottom:22px">
+    <div style="font-size:13px;color:#a8a8a4;margin-bottom:8px">Or pick a date</div>
+    <input type="date" id="date-in" value="${STATE.dateInput}" max="${today}" oninput="STATE.dateInput=this.value;render()"
+      style="width:100%;padding:12px 14px;border:0.5px solid rgba(0,0,0,0.2);border-radius:10px;font-size:16px;font-family:'DM Sans',sans-serif;outline:none;color:#1a1a1a;background:#ffffff">
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <button class="secondary-btn" onclick="setState({modal:'notes'})">Back</button>
     <button class="primary-btn" onclick="addTx()">Save</button>
   </div>`;}
 
 function mBudget(){
   const[yr,mo]=STATE.curMonth.split('-').map(Number);
-  return`<h2 class="serif" style="font-size:20px;font-weight:400;margin-bottom:4px">Set budget</h2>
-  <p style="font-size:13px;color:#6b6b68;margin-bottom:18px">${MONTHS[mo-1]} ${yr}</p>
+  return`<h2 class="serif" style="font-size:22px;font-weight:400;margin-bottom:4px">Set budget</h2>
+  <p style="font-size:15px;color:#6b6b68;margin-bottom:18px">${MONTHS[mo-1]} ${yr}</p>
   <div style="display:flex;align-items:baseline;gap:8px;border-bottom:0.5px solid rgba(0,0,0,0.2);padding-bottom:8px;margin-bottom:22px">
-    <span class="serif" style="font-size:26px;color:#a8a8a4">&euro;</span>
+    <span class="serif" style="font-size:28px;color:#a8a8a4">&euro;</span>
     <input id="bud-in" type="number" inputmode="decimal" value="${STATE.budgetInput}" placeholder="0.00" oninput="STATE.budgetInput=this.value" onkeydown="if(event.key==='Enter')setBudget()"
-      style="flex:1;font-size:28px;font-family:'Playfair Display',serif;font-weight:300;border:none;outline:none">
+      style="flex:1;font-size:30px;font-family:'Playfair Display',serif;font-weight:300;border:none;outline:none">
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
     <button class="secondary-btn" onclick="closeModal()">Cancel</button>
@@ -355,64 +390,64 @@ function mBudget(){
 function mView(){
   const tx=STATE.viewTx,cat=getCat(tx.category);
   const ds=new Date(tx.date+'T12:00').toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-  return`<h2 class="serif" style="font-size:20px;font-weight:400;margin-bottom:18px">Transaction</h2>
+  return`<h2 class="serif" style="font-size:22px;font-weight:400;margin-bottom:18px">Transaction</h2>
   <div style="display:flex;align-items:center;gap:16px;padding:18px;background:${cat.bg};border-radius:${tx.note?'12px 12px 0 0':'12px'};margin-bottom:${tx.note?'0':'18px'}">
-    <span style="font-size:36px">${em(cat.id)}</span>
+    <span style="font-size:38px">${em(cat.id)}</span>
     <div>
-      <div style="font-size:11px;color:${cat.color};font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">${cat.label}</div>
-      <div class="serif" style="font-size:30px;font-weight:300">${fmtAmt(tx.amount)}</div>
-      <div style="font-size:12px;color:#a8a8a4;margin-top:4px">${ds}</div>
+      <div style="font-size:13px;color:${cat.color};font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">${cat.label}</div>
+      <div class="serif" style="font-size:32px;font-weight:300">${fmtAmt(tx.amount)}</div>
+      <div style="font-size:14px;color:#a8a8a4;margin-top:4px">${ds}</div>
     </div>
   </div>
-  ${tx.note?`<div style="padding:12px 16px;border:0.5px solid ${cat.color}30;border-top:none;border-radius:0 0 12px 12px;margin-bottom:18px;font-size:13px;color:#6b6b68">${EM.note} ${esc(tx.note)}</div>`:'<div style="margin-bottom:18px"></div>'}
+  ${tx.note?`<div style="padding:12px 16px;border:0.5px solid ${cat.color}30;border-top:none;border-radius:0 0 12px 12px;margin-bottom:18px;font-size:15px;color:#6b6b68">${EM.note} ${esc(tx.note)}</div>`:'<div style="margin-bottom:18px"></div>'}
   <button class="del-btn" onclick="delTx('${tx.id}')">Delete transaction</button>`;}
 
 function mData(){
   const tc=(APP.transactions||[]).length,mc=Object.keys(APP.budgets||{}).length;
   const connected=!!(SYNC.token&&SYNC.gistId);
   const lastSaved=SYNC.lastSaved?SYNC.lastSaved.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):null;
-  return`<h2 class="serif" style="font-size:20px;font-weight:400;margin-bottom:18px">Data &amp; Sync</h2>
+  return`<h2 class="serif" style="font-size:22px;font-weight:400;margin-bottom:18px">Data &amp; Sync</h2>
   <div style="background:${connected?'rgba(29,158,117,0.08)':'#f5f4f0'};border-radius:12px;padding:14px 16px;margin-bottom:14px;border:0.5px solid ${connected?'rgba(29,158,117,0.28)':'rgba(0,0,0,0.10)'}">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
       <span class="sync-dot" style="background:${connected?'#1D9E75':'#888780'}"></span>
-      <span style="font-size:13px;font-weight:500">${connected?'Connected to GitHub Gist':'Local only'}</span>
+      <span style="font-size:15px;font-weight:500">${connected?'Connected to GitHub Gist':'Local only'}</span>
     </div>
-    <div style="font-size:12px;color:#a8a8a4">${connected?`Private gist &middot; ${tc} transactions &middot; ${mc} budgets${lastSaved?' &middot; last saved '+lastSaved:''}`:(`${tc} transaction${tc!==1?'s':''} stored locally`)}</div>
+    <div style="font-size:14px;color:#a8a8a4">${connected?`Private gist &middot; ${tc} transactions &middot; ${mc} budgets${lastSaved?' &middot; last saved '+lastSaved:''}`:(`${tc} transaction${tc!==1?'s':''} stored locally`)}</div>
   </div>
-  ${STATE.dataMsg?`<div style="font-size:13px;color:#6b6b68;margin-bottom:12px;padding:10px 12px;background:#f5f4f0;border-radius:8px">${esc(STATE.dataMsg)}</div>`:''}
+  ${STATE.dataMsg?`<div style="font-size:15px;color:#6b6b68;margin-bottom:12px;padding:10px 12px;background:#f5f4f0;border-radius:8px">${esc(STATE.dataMsg)}</div>`:''}
   ${connected?`
-    <button onclick="forceSync()" style="width:100%;padding:12px;border-radius:10px;border:0.5px solid rgba(0,0,0,0.2);background:none;font-size:14px;color:#1a1a1a;margin-bottom:8px">Force sync now</button>
-    <button onclick="disconnectGitHub()" style="width:100%;padding:12px;border-radius:10px;border:0.5px solid rgba(192,57,43,0.28);background:#fdf0ef;color:#c0392b;font-size:14px;margin-bottom:8px">Disconnect GitHub</button>
+    <button onclick="forceSync()" style="width:100%;padding:12px;border-radius:10px;border:0.5px solid rgba(0,0,0,0.2);background:none;font-size:16px;color:#1a1a1a;margin-bottom:8px">Force sync now</button>
+    <button onclick="disconnectGitHub()" style="width:100%;padding:12px;border-radius:10px;border:0.5px solid rgba(192,57,43,0.28);background:#fdf0ef;color:#c0392b;font-size:16px;margin-bottom:8px">Disconnect GitHub</button>
   `:`<button onclick="setState({modal:'setup',tokenInput:'',setupError:'',setupLoading:false})" class="primary-btn" style="margin-bottom:8px">Connect to GitHub &rarr;</button>`}
   <div style="border-top:0.5px solid rgba(0,0,0,0.08);margin:10px 0 14px"></div>
-  <div style="font-size:11px;color:#a8a8a4;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px">Local backup</div>
-  <button onclick="exportBackup()" style="width:100%;padding:12px;border-radius:10px;border:0.5px solid rgba(0,0,0,0.2);background:none;font-size:14px;color:#1a1a1a;margin-bottom:8px">&darr; Export backup (JSON)</button>
+  <div style="font-size:13px;color:#a8a8a4;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px">Local backup</div>
+  <button onclick="exportBackup()" style="width:100%;padding:12px;border-radius:10px;border:0.5px solid rgba(0,0,0,0.2);background:none;font-size:16px;color:#1a1a1a;margin-bottom:8px">&darr; Export backup (JSON)</button>
   <input type="file" id="imp-file" accept=".json" style="display:none" onchange="handleImport(this)">
-  <button onclick="triggerImport()" style="width:100%;padding:12px;border-radius:10px;border:0.5px solid rgba(0,0,0,0.2);background:none;font-size:14px;color:#1a1a1a;margin-bottom:8px">&uarr; Import from backup</button>
-  <button onclick="closeModal()" style="width:100%;padding:10px;background:none;border:none;color:#a8a8a4;font-size:13px;font-family:inherit">Done</button>`;}
+  <button onclick="triggerImport()" style="width:100%;padding:12px;border-radius:10px;border:0.5px solid rgba(0,0,0,0.2);background:none;font-size:16px;color:#1a1a1a;margin-bottom:8px">&uarr; Import from backup</button>
+  <button onclick="closeModal()" style="width:100%;padding:10px;background:none;border:none;color:#a8a8a4;font-size:15px;font-family:inherit">Done</button>`;}
 
 // ── Tabs ──────────────────────────────────────────────────────
 function tTx(txs){
   if(!txs.length) return`<div style="text-align:center;padding:64px 20px;color:#a8a8a4">
-    <div style="font-size:42px;margin-bottom:12px;opacity:0.28">${EM.receipt}</div>
-    <p class="serif" style="font-size:18px;font-weight:300;margin-bottom:5px">No transactions yet</p>
-    <p style="font-size:13px">Tap + to add your first expense</p>
+    <div style="font-size:44px;margin-bottom:12px;opacity:0.28">${EM.receipt}</div>
+    <p class="serif" style="font-size:20px;font-weight:300;margin-bottom:5px">No transactions yet</p>
+    <p style="font-size:15px">Tap + to add your first expense</p>
   </div>`;
   let html='',prev='';
   txs.forEach(tx=>{
     const cat=getCat(tx.category);
     if(tx.date!==prev){
       const ds=new Date(tx.date+'T12:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
-      html+=`<div style="font-size:11px;color:#a8a8a4;text-transform:uppercase;letter-spacing:0.5px;padding:14px 0 5px;font-weight:500">${ds}</div>`;
+      html+=`<div style="font-size:13px;color:#a8a8a4;text-transform:uppercase;letter-spacing:0.5px;padding:14px 0 5px;font-weight:500">${ds}</div>`;
       prev=tx.date;
     }
     html+=`<div class="tx-row" onclick="STATE.viewTx=APP.transactions.find(t=>t.id==='${tx.id}');setState({modal:'view'})">
-      <div style="width:42px;height:42px;border-radius:10px;background:${cat.bg};display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${em(cat.id)}</div>
+      <div style="width:42px;height:42px;border-radius:10px;background:${cat.bg};display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">${em(cat.id)}</div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:14px;font-weight:500">${cat.label}</div>
-        ${tx.note?`<div style="font-size:11px;color:#a8a8a4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(tx.note)}</div>`:''}
+        <div style="font-size:16px;font-weight:500">${cat.label}</div>
+        ${tx.note?`<div style="font-size:13px;color:#a8a8a4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(tx.note)}</div>`:''}
       </div>
-      <div class="serif" style="font-size:17px;font-weight:300;flex-shrink:0">&minus;${fmtAmt(tx.amount)}</div>
+      <div class="serif" style="font-size:19px;font-weight:300;flex-shrink:0">&minus;${fmtAmt(tx.amount)}</div>
     </div>`;
   });
   return html;
@@ -422,26 +457,26 @@ function tChart(txs){
   const spent=txs.reduce((s,t)=>s+t.amount,0);
   const ct={};txs.forEach(t=>{ct[t.category]=(ct[t.category]||0)+t.amount;});
   const bd=CATS.filter(c=>ct[c.id]).map(c=>({...c,val:ct[c.id],pct:spent>0?ct[c.id]/spent*100:0})).sort((a,b)=>b.val-a.val);
-  if(!bd.length) return`<div style="text-align:center;padding:64px 20px;color:#a8a8a4"><p class="serif" style="font-size:18px;font-weight:300">No data yet</p></div>`;
+  if(!bd.length) return`<div style="text-align:center;padding:64px 20px;color:#a8a8a4"><p class="serif" style="font-size:20px;font-weight:300">No data yet</p></div>`;
   return`<div style="padding-top:16px">
     ${bd.map(c=>`<div style="margin-bottom:16px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <div style="display:flex;align-items:center;gap:8px"><span style="font-size:17px">${em(c.id)}</span><span style="font-size:13px;font-weight:500">${c.label}</span></div>
-        <div><span class="serif" style="font-size:15px;font-weight:300">${fmtAmt(c.val)}</span><span style="font-size:11px;color:#a8a8a4;margin-left:4px">${c.pct.toFixed(0)}%</span></div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="font-size:19px">${em(c.id)}</span><span style="font-size:15px;font-weight:500">${c.label}</span></div>
+        <div><span class="serif" style="font-size:17px;font-weight:300">${fmtAmt(c.val)}</span><span style="font-size:13px;color:#a8a8a4;margin-left:4px">${c.pct.toFixed(0)}%</span></div>
       </div>
       <div style="background:#f5f4f0;border-radius:999px;height:7px;overflow:hidden">
         <div class="bar-fill" style="height:100%;border-radius:999px;width:${c.pct.toFixed(1)}%;background:${c.color}"></div>
       </div>
     </div>`).join('')}
     <div style="margin-top:10px;padding:13px 15px;background:#f5f4f0;border-radius:10px;display:flex;justify-content:space-between;align-items:center">
-      <span style="font-size:13px;color:#6b6b68">Total this month</span>
-      <span class="serif" style="font-size:18px;font-weight:300">${fmtAmt(spent)}</span>
+      <span style="font-size:15px;color:#6b6b68">Total this month</span>
+      <span class="serif" style="font-size:20px;font-weight:300">${fmtAmt(spent)}</span>
     </div>
   </div>`;}
 
 function tHistory(){
   const all=getAllMonths();
-  if(!all.length) return`<div style="text-align:center;padding:64px 20px;color:#a8a8a4"><p class="serif" style="font-size:18px;font-weight:300">No history yet</p></div>`;
+  if(!all.length) return`<div style="text-align:center;padding:64px 20px;color:#a8a8a4"><p class="serif" style="font-size:20px;font-weight:300">No history yet</p></div>`;
   return`<div style="padding-top:16px">${all.map(mk=>{
     const txs=(APP.transactions||[]).filter(t=>t.month===mk);
     const spent=txs.reduce((s,t)=>s+t.amount,0);
@@ -452,12 +487,12 @@ function tHistory(){
     return`<div class="hist-card" onclick="goToMonth('${mk}')" style="${isCur?'border:0.5px solid rgba(0,0,0,0.2);':''}">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${budget?'10px':'0'}">
         <div>
-          <div style="font-size:14px;font-weight:500">${mlabel(mk)}${isCur?` <span style="font-size:10px;color:#a8a8a4;background:#eceae4;padding:2px 7px;border-radius:99px">now</span>`:''}</div>
-          <div style="font-size:11px;color:#a8a8a4;margin-top:2px">${txs.length} transaction${txs.length!==1?'s':''}</div>
+          <div style="font-size:16px;font-weight:500">${mlabel(mk)}${isCur?` <span style="font-size:12px;color:#a8a8a4;background:#eceae4;padding:2px 7px;border-radius:99px">now</span>`:''}</div>
+          <div style="font-size:13px;color:#a8a8a4;margin-top:2px">${txs.length} transaction${txs.length!==1?'s':''}</div>
         </div>
         <div style="text-align:right">
-          <div class="serif" style="font-size:18px;font-weight:300">${fmtAmt(spent)}</div>
-          ${budget?`<div style="font-size:11px;color:#a8a8a4">of ${fmtAmt(budget)}</div>`:''}
+          <div class="serif" style="font-size:20px;font-weight:300">${fmtAmt(spent)}</div>
+          ${budget?`<div style="font-size:13px;color:#a8a8a4">of ${fmtAmt(budget)}</div>`:''}
         </div>
       </div>
       ${budget?`<div style="background:rgba(0,0,0,0.08);border-radius:999px;height:4px;overflow:hidden"><div style="height:100%;border-radius:999px;width:${pct.toFixed(1)}%;background:${bc}"></div></div>`:''}
@@ -477,12 +512,12 @@ function initTrend(){
   const tc='rgba(0,0,0,0.30)',gc='rgba(0,0,0,0.05)';
   const ds=[{label:'Spending',data:spending,borderColor:'#D85A30',backgroundColor:'rgba(216,90,48,0.07)',tension:0.38,fill:true,pointBackgroundColor:'#D85A30',pointRadius:4,pointHoverRadius:6,borderWidth:2}];
   if(hasBudget) ds.push({label:'Budget',data:budgets,borderColor:'rgba(55,138,221,0.55)',borderDash:[5,4],tension:0,fill:false,pointRadius:3,pointBackgroundColor:'#378ADD',borderWidth:1.5,spanGaps:true});
-  try{trendChart=new Chart(cv,{type:'line',data:{labels,datasets:ds},options:{responsive:true,maintainAspectRatio:true,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`  ${c.dataset.label}: \u20AC${c.parsed.y.toFixed(2)}`}}},scales:{x:{grid:{color:gc},ticks:{color:tc,font:{size:11}}},y:{grid:{color:gc},ticks:{color:tc,font:{size:11},callback:v=>`\u20AC${v}`},beginAtZero:true}}}});}catch(e){}
+  try{trendChart=new Chart(cv,{type:'line',data:{labels,datasets:ds},options:{responsive:true,maintainAspectRatio:true,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`  ${c.dataset.label}: \u20AC${c.parsed.y.toFixed(2)}`}}},scales:{x:{grid:{color:gc},ticks:{color:tc,font:{size:13}}},y:{grid:{color:gc},ticks:{color:tc,font:{size:13},callback:v=>`\u20AC${v}`},beginAtZero:true}}}});}catch(e){}
   const leg=document.getElementById('trend-leg');
-  if(leg) leg.innerHTML=`<div style="display:flex;gap:20px;justify-content:center;font-size:12px;color:#6b6b68">
+  if(leg) leg.innerHTML=`<div style="display:flex;gap:20px;justify-content:center;font-size:14px;color:#6b6b68">
     <div style="display:flex;align-items:center;gap:6px"><div style="width:16px;height:2px;background:#D85A30;border-radius:1px"></div>Spending</div>
     ${hasBudget?`<div style="display:flex;align-items:center;gap:6px"><div style="width:16px;height:0;border-top:2px dashed rgba(55,138,221,0.65)"></div>Budget</div>`:''}
-  </div><p style="text-align:center;font-size:11px;color:#a8a8a4;margin-top:6px">Last 6 months</p>`;}
+  </div><p style="text-align:center;font-size:13px;color:#a8a8a4;margin-top:6px">Last 6 months</p>`;}
 
 // ── Render ────────────────────────────────────────────────────
 function render(){
@@ -499,6 +534,7 @@ function render(){
   else if(STATE.modal==='calc')           inner=mCalc();
   else if(STATE.modal==='cat')            inner=mCat();
   else if(STATE.modal==='notes')          inner=mNotes();
+  else if(STATE.modal==='date')           inner=mDate();
   else if(STATE.modal==='budget')         inner=mBudget();
   else if(STATE.modal==='view'&&STATE.viewTx) inner=mView();
   else if(STATE.modal==='data')           inner=mData();
@@ -515,12 +551,12 @@ function render(){
     <div style="padding:max(env(safe-area-inset-top),24px) 20px 0">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
         <div>
-          <div class="serif" style="font-size:28px;font-weight:400;line-height:1;color:#1a1a1a">Finch</div>
-          <div style="font-size:10px;color:#a8a8a4;margin-top:2px;letter-spacing:0.9px;text-transform:uppercase">Personal Finance</div>
+          <div class="serif" style="font-size:30px;font-weight:400;line-height:1;color:#1a1a1a">Finch</div>
+          <div style="font-size:12px;color:#a8a8a4;margin-top:2px;letter-spacing:0.9px;text-transform:uppercase">Personal Finance</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
           <button class="mth-btn" onclick="navMonth(-1)">&lsaquo;</button>
-          <span style="font-size:12px;font-weight:500;min-width:108px;text-align:center;color:#1a1a1a">${MONTHS[mo-1]} ${yr}</span>
+          <span style="font-size:14px;font-weight:500;min-width:108px;text-align:center;color:#1a1a1a">${MONTHS[mo-1]} ${yr}</span>
           <button class="mth-btn" onclick="navMonth(1)">&rsaquo;</button>
           <button class="add-fab" onclick="setState({modal:'calc',calcExpr:'',calcDisp:'0'})">+</button>
           <button class="icon-btn" onclick="setState({modal:'data',dataMsg:''})">&#9881;</button>
@@ -528,24 +564,24 @@ function render(){
       </div>
       <div id="sync-row" style="display:flex;align-items:center;gap:4px;min-height:22px;margin-bottom:14px">
         ${connected
-          ?`<span class="sync-dot" style="background:#1D9E75"></span><span style="font-size:10px;color:#6b6b68">GitHub synced</span>`
-          :`<span style="font-size:10px;color:#a8a8a4;text-decoration:underline;text-underline-offset:2px;cursor:pointer" onclick="setState({modal:'setup',tokenInput:'',setupError:'',setupLoading:false})">Connect GitHub to back up your data &rarr;</span>`}
+          ?`<span class="sync-dot" style="background:#1D9E75"></span><span style="font-size:12px;color:#6b6b68">GitHub synced</span>`
+          :`<span style="font-size:12px;color:#a8a8a4;text-decoration:underline;text-underline-offset:2px;cursor:pointer" onclick="setState({modal:'setup',tokenInput:'',setupError:'',setupLoading:false})">Connect GitHub to back up your data &rarr;</span>`}
       </div>
       <div style="background:#f5f4f0;border-radius:14px;padding:18px;margin-bottom:14px">
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;${budget>0?'margin-bottom:14px':''}">
           <div style="text-align:center">
-            <div style="font-size:10px;color:#a8a8a4;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px">Spent</div>
-            <div class="serif" style="font-size:20px;font-weight:300">${fmtAmt(spent)}</div>
+            <div style="font-size:12px;color:#a8a8a4;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px">Spent</div>
+            <div class="serif" style="font-size:22px;font-weight:300">${fmtAmt(spent)}</div>
           </div>
           <div style="text-align:center;border-left:0.5px solid rgba(0,0,0,0.10);border-right:0.5px solid rgba(0,0,0,0.10)">
-            <div style="font-size:10px;color:#a8a8a4;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px">Budget</div>
-            <button onclick="STATE.budgetInput='${budget||''}';setState({modal:'budget'})" class="serif" style="font-size:20px;font-weight:300;color:${budget?'#1a1a1a':'#a8a8a4'};background:none;border:none;padding:0;cursor:pointer">
+            <div style="font-size:12px;color:#a8a8a4;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px">Budget</div>
+            <button onclick="STATE.budgetInput='${budget||''}';setState({modal:'budget'})" class="serif" style="font-size:22px;font-weight:300;color:${budget?'#1a1a1a':'#a8a8a4'};background:none;border:none;padding:0;cursor:pointer">
               ${budget?fmtAmt(budget):'Set &rarr;'}
             </button>
           </div>
           <div style="text-align:center">
-            <div style="font-size:10px;color:#a8a8a4;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px">Left</div>
-            <div class="serif" style="font-size:20px;font-weight:300;color:${left<0?'#c0392b':'#1a1a1a'}">${left<0?'&minus;':''}${fmtAmt(left)}</div>
+            <div style="font-size:12px;color:#a8a8a4;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px">Left</div>
+            <div class="serif" style="font-size:22px;font-weight:300;color:${left<0?'#c0392b':'#1a1a1a'}">${left<0?'&minus;':''}${fmtAmt(left)}</div>
           </div>
         </div>
         ${budget>0?`
@@ -553,8 +589,8 @@ function render(){
           <div class="bar-fill" style="height:100%;border-radius:999px;width:${pct.toFixed(1)}%;background:${bc}"></div>
         </div>
         <div style="display:flex;justify-content:space-between;margin-top:5px">
-          <span style="font-size:10px;color:#a8a8a4">${pct.toFixed(0)}% used</span>
-          <span style="font-size:10px;color:${left<0?'#c0392b':'#a8a8a4'}">${left<0?'over budget by '+fmtAmt(-left):''}</span>
+          <span style="font-size:12px;color:#a8a8a4">${pct.toFixed(0)}% used</span>
+          <span style="font-size:12px;color:${left<0?'#c0392b':'#a8a8a4'}">${left<0?'over budget by '+fmtAmt(-left):''}</span>
         </div>`:''}
       </div>
       <div class="tab-bar">
