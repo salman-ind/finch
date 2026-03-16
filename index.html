@@ -175,6 +175,33 @@ function updateSyncDot(){
   else if(SYNC.status==='synced') el.innerHTML=`<span class="sync-dot" style="background:#1D9E75"></span><span style="font-size:10px;color:#6b6b68">Saved to GitHub</span>`;
   else if(SYNC.status==='error') el.innerHTML=`<span class="sync-dot" style="background:#E24B4A"></span><span style="font-size:10px;color:#c0392b">Sync failed</span>`;
 }
+function exportBackup(){
+  try{
+    const b=new Blob([JSON.stringify(APP,null,2)],{type:'application/json'});
+    const u=URL.createObjectURL(b);
+    const a=document.createElement('a');
+    a.href=u;a.download='finch-backup.json';
+    document.body.appendChild(a);a.click();
+    document.body.removeChild(a);URL.revokeObjectURL(u);
+  }catch(e){alert('Export failed.');}
+}
+function triggerImport(){
+  const el=document.getElementById('imp-file');if(el)el.click();
+}
+function handleImport(input){
+  if(!input.files||!input.files[0])return;
+  const reader=new FileReader();
+  reader.onload=async e=>{
+    try{
+      const data=JSON.parse(e.target.result);
+      if(data&&Array.isArray(data.transactions)&&typeof data.budgets==='object'){
+        APP=data;await saveData();
+        setState({modal:'data',dataMsg:'Import successful! '+data.transactions.length+' transactions loaded.'});
+      }else{alert('Invalid backup file.');}
+    }catch(ex){alert('Failed to read file — make sure it is a valid Finch JSON backup.');}
+  };
+  reader.readAsText(input.files[0]);
+}
 async function saveData(){
   try{ls.set('finch_v2',JSON.stringify(APP));}catch(e){}
   if(SYNC.token&&SYNC.gistId) ghSave();
@@ -357,6 +384,11 @@ function mData(){
     <button onclick="forceSync()" style="width:100%;padding:12px;border-radius:10px;border:0.5px solid rgba(0,0,0,0.2);background:none;font-size:14px;color:#1a1a1a;margin-bottom:8px">Force sync now</button>
     <button onclick="disconnectGitHub()" style="width:100%;padding:12px;border-radius:10px;border:0.5px solid rgba(192,57,43,0.28);background:#fdf0ef;color:#c0392b;font-size:14px;margin-bottom:8px">Disconnect GitHub</button>
   `:`<button onclick="setState({modal:'setup',tokenInput:'',setupError:'',setupLoading:false})" class="primary-btn" style="margin-bottom:8px">Connect to GitHub &rarr;</button>`}
+  <div style="border-top:0.5px solid rgba(0,0,0,0.08);margin:10px 0 14px"></div>
+  <div style="font-size:11px;color:#a8a8a4;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px">Local backup</div>
+  <button onclick="exportBackup()" style="width:100%;padding:12px;border-radius:10px;border:0.5px solid rgba(0,0,0,0.2);background:none;font-size:14px;color:#1a1a1a;margin-bottom:8px">&darr; Export backup (JSON)</button>
+  <input type="file" id="imp-file" accept=".json" style="display:none" onchange="handleImport(this)">
+  <button onclick="triggerImport()" style="width:100%;padding:12px;border-radius:10px;border:0.5px solid rgba(0,0,0,0.2);background:none;font-size:14px;color:#1a1a1a;margin-bottom:8px">&uarr; Import from backup</button>
   <button onclick="closeModal()" style="width:100%;padding:10px;background:none;border:none;color:#a8a8a4;font-size:13px;font-family:inherit">Done</button>`;}
 
 // ── Tabs ──────────────────────────────────────────────────────
