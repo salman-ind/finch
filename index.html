@@ -52,7 +52,8 @@ input  { font-family: inherit; -webkit-appearance: none; background: transparent
 .tx-row:hover, .tx-row:active { background: var(--bg2); }
 
 .mth-btn { width: 32px; height: 32px; border-radius: 50%; border: 0.5px solid var(--border2); background: none; font-size: 16px; color: var(--text2); display: flex; align-items: center; justify-content: center; }
-.add-fab { width: 44px; height: 44px; border-radius: 50%; background: var(--text); color: var(--bg); border: none; font-size: 28px; display: flex; align-items: center; justify-content: center; line-height: 1; flex-shrink: 0; box-shadow: 0 2px 14px rgba(0,0,0,0.16); }
+.add-fab { width: 62px; height: 62px; border-radius: 50%; background: #1D9E75; color: #ffffff; border: none; font-size: 36px; display: flex; align-items: center; justify-content: center; line-height: 1; position: fixed; bottom: 28px; right: 24px; z-index: 150; box-shadow: 0 4px 20px rgba(29,158,117,0.45); transition: transform 0.15s, opacity 0.15s; }
+.add-fab:active { transform: scale(0.93) !important; opacity: 1 !important; }
 .icon-btn { width: 32px; height: 32px; border-radius: 50%; border: 0.5px solid var(--border2); background: none; font-size: 16px; color: var(--text2); display: flex; align-items: center; justify-content: center; }
 
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.40); display: flex; align-items: flex-end; justify-content: center; z-index: 200; animation: fadeIn 0.15s ease; }
@@ -117,6 +118,7 @@ const CATS = [
 ];
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const mkKey  = d  => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+const localToday = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 const fmtAmt = n  => '\u20AC' + Math.abs(n).toFixed(2);
 const getCat = id => CATS.find(c=>c.id===id)||CATS[8];
 const esc    = s  => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
@@ -128,7 +130,8 @@ let APP   = {budgets:{},transactions:[]};
 let SYNC  = {token:ls.get('finch_gh_token')||'',gistId:ls.get('finch_gh_gist')||'',status:'idle',lastSaved:null};
 let STATE = {
   curMonth:mkKey(new Date()),modal:null,
-  amount:null,pendingCat:null,noteInput:'',dateInput:new Date().toISOString().split('T')[0],
+  amount:null,pendingCat:null,noteInput:'',dateInput:localToday(),
+  editingId:null,
   viewTx:null,tab:'tx',
   budgetInput:'',calcExpr:'',calcDisp:'0',
   tokenInput:'',setupError:'',setupLoading:false,dataMsg:'',
@@ -231,7 +234,17 @@ async function forceSync(){
 
 // ── State helpers ─────────────────────────────────────────────
 function setState(p){Object.assign(STATE,p);render();}
-function closeModal(){setState({modal:null,viewTx:null,pendingCat:null,noteInput:'',dateInput:new Date().toISOString().split('T')[0],dataMsg:''});}
+function startEdit(id){
+  const tx=APP.transactions.find(t=>t.id===id);
+  if(!tx)return;
+  setState({
+    editingId:id, modal:'calc',
+    amount:tx.amount, calcExpr:String(tx.amount), calcDisp:String(tx.amount),
+    pendingCat:tx.category, noteInput:tx.note||'', dateInput:tx.date,
+    viewTx:null,
+  });
+}
+function closeModal(){setState({modal:null,viewTx:null,pendingCat:null,noteInput:'',dateInput:localToday(),editingId:null,dataMsg:''});}
 
 function calcPress(v){
   const ops=['+','-','*','/'];let e=STATE.calcExpr;
@@ -259,8 +272,15 @@ function pickCat(id){setState({pendingCat:id,modal:'notes',noteInput:''});}
 async function addTx(){
   const d=new Date(STATE.dateInput+'T12:00');
   const monthKey=mkKey(d);
-  APP.transactions.push({id:String(Date.now()),amount:STATE.amount,category:STATE.pendingCat,date:STATE.dateInput,month:monthKey,ts:Date.now(),note:STATE.noteInput.trim()});
-  await saveData();setState({modal:null,amount:null,pendingCat:null,noteInput:'',dateInput:new Date().toISOString().split('T')[0],curMonth:monthKey,tab:'tx'});
+  if(STATE.editingId){
+    const idx=APP.transactions.findIndex(t=>t.id===STATE.editingId);
+    if(idx!==-1){
+      APP.transactions[idx]={...APP.transactions[idx],amount:STATE.amount,category:STATE.pendingCat,date:STATE.dateInput,month:monthKey,note:STATE.noteInput.trim()};
+    }
+  } else {
+    APP.transactions.push({id:String(Date.now()),amount:STATE.amount,category:STATE.pendingCat,date:STATE.dateInput,month:monthKey,ts:Date.now(),note:STATE.noteInput.trim()});
+  }
+  await saveData();setState({modal:null,amount:null,pendingCat:null,noteInput:'',dateInput:localToday(),editingId:null,curMonth:monthKey,tab:'tx'});
 }
 async function delTx(id){
   APP.transactions=APP.transactions.filter(t=>t.id!==id);
@@ -302,7 +322,7 @@ function mCalc(){
     [{l:'4',v:'4'},{l:'5',v:'5'},{l:'6',v:'6'},{l:'+',v:'+',fg:'#378ADD',bg:'#f5f4f0'}],
     [{l:'1',v:'1'},{l:'2',v:'2'},{l:'3',v:'3'},{l:'.',v:'.'}],
   ];
-  return`<h2 class="serif" style="font-size:22px;font-weight:400;margin-bottom:14px">Add expense</h2>
+  return`<h2 class="serif" style="font-size:22px;font-weight:400;margin-bottom:14px">${STATE.editingId?'Edit expense':'Add expense'}</h2>
   <div style="background:#f5f4f0;border-radius:10px;padding:14px 16px;margin-bottom:12px;text-align:right;min-height:60px;display:flex;align-items:center;justify-content:flex-end">
     <span id="calc-disp" class="serif" style="font-size:34px;font-weight:300;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${STATE.calcDisp}</span>
   </div>
@@ -348,8 +368,14 @@ function mNotes(){
 
 function mDate(){
   const cat=getCat(STATE.pendingCat);
-  const today=new Date().toISOString().split('T')[0];
-  const isToday=STATE.dateInput===today;
+  const today=localToday();
+  const yd=new Date(); yd.setDate(yd.getDate()-1);
+  const yesterday=`${yd.getFullYear()}-${String(yd.getMonth()+1).padStart(2,'0')}-${String(yd.getDate()).padStart(2,'0')}`;
+  const sel=STATE.dateInput;
+  const pill=(label,val)=>{
+    const active=sel===val;
+    return`<button onclick="STATE.dateInput='${val}';render()" style="flex:1;padding:11px;border-radius:10px;border:0.5px solid ${active?'#1D9E75':'rgba(0,0,0,0.2)'};background:${active?'#1D9E75':'none'};color:${active?'#ffffff':'#1a1a1a'};font-size:16px;font-family:inherit;font-weight:${active?'500':'400'}">${label}</button>`;
+  };
   return`<h2 class="serif" style="font-size:22px;font-weight:400;margin-bottom:18px">When was this?</h2>
   <div style="display:flex;align-items:center;gap:14px;padding:16px;background:${cat.bg};border-radius:12px;margin-bottom:22px">
     <span style="font-size:36px">${em(cat.id)}</span>
@@ -360,17 +386,17 @@ function mDate(){
     </div>
   </div>
   <div style="display:flex;gap:8px;margin-bottom:16px">
-    <button onclick="STATE.dateInput='${today}';render()" style="flex:1;padding:10px;border-radius:10px;border:0.5px solid ${isToday?'#1a1a1a':'rgba(0,0,0,0.2)'};background:${isToday?'#1a1a1a':'none'};color:${isToday?'#ffffff':'#1a1a1a'};font-size:15px;font-family:inherit">Today</button>
-    <button onclick="STATE.dateInput=new Date(new Date()-86400000).toISOString().split('T')[0];render()" style="flex:1;padding:10px;border-radius:10px;border:0.5px solid ${!isToday&&STATE.dateInput===new Date(new Date()-86400000).toISOString().split('T')[0]?'#1a1a1a':'rgba(0,0,0,0.2)'};background:${!isToday&&STATE.dateInput===new Date(new Date()-86400000).toISOString().split('T')[0]?'#1a1a1a':'none'};color:${!isToday&&STATE.dateInput===new Date(new Date()-86400000).toISOString().split('T')[0]?'#ffffff':'#1a1a1a'};font-size:15px;font-family:inherit">Yesterday</button>
+    ${pill('Today',today)}
+    ${pill('Yesterday',yesterday)}
   </div>
   <div style="margin-bottom:22px">
-    <div style="font-size:13px;color:#a8a8a4;margin-bottom:8px">Or pick a date</div>
-    <input type="date" id="date-in" value="${STATE.dateInput}" max="${today}" oninput="STATE.dateInput=this.value;render()"
+    <div style="font-size:13px;color:#a8a8a4;margin-bottom:8px">Or pick any date</div>
+    <input type="date" id="date-in" value="${sel}" oninput="STATE.dateInput=this.value;render()"
       style="width:100%;padding:12px 14px;border:0.5px solid rgba(0,0,0,0.2);border-radius:10px;font-size:16px;font-family:'DM Sans',sans-serif;outline:none;color:#1a1a1a;background:#ffffff">
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
     <button class="secondary-btn" onclick="setState({modal:'notes'})">Back</button>
-    <button class="primary-btn" onclick="addTx()">Save</button>
+    <button class="primary-btn" onclick="addTx()">${STATE.editingId?'Update':'Save'}</button>
   </div>`;}
 
 function mBudget(){
@@ -400,6 +426,7 @@ function mView(){
     </div>
   </div>
   ${tx.note?`<div style="padding:12px 16px;border:0.5px solid ${cat.color}30;border-top:none;border-radius:0 0 12px 12px;margin-bottom:18px;font-size:15px;color:#6b6b68">${EM.note} ${esc(tx.note)}</div>`:'<div style="margin-bottom:18px"></div>'}
+  <button onclick="startEdit('${tx.id}')" style="width:100%;padding:13px;border-radius:10px;border:0.5px solid rgba(0,0,0,0.2);background:none;color:#1a1a1a;font-size:16px;font-weight:500;margin-bottom:10px">Edit transaction</button>
   <button class="del-btn" onclick="delTx('${tx.id}')">Delete transaction</button>`;}
 
 function mData(){
@@ -558,7 +585,6 @@ function render(){
           <button class="mth-btn" onclick="navMonth(-1)">&lsaquo;</button>
           <span style="font-size:14px;font-weight:500;min-width:108px;text-align:center;color:#1a1a1a">${MONTHS[mo-1]} ${yr}</span>
           <button class="mth-btn" onclick="navMonth(1)">&rsaquo;</button>
-          <button class="add-fab" onclick="setState({modal:'calc',calcExpr:'',calcDisp:'0'})">+</button>
           <button class="icon-btn" onclick="setState({modal:'data',dataMsg:''})">&#9881;</button>
         </div>
       </div>
@@ -597,7 +623,8 @@ function render(){
         ${tabs.map(([k,l])=>`<button class="tab-btn ${STATE.tab===k?'active':''}" onclick="setState({tab:'${k}'})">${l}</button>`).join('')}
       </div>
     </div>
-    <div style="padding:0 20px 80px">${tc}</div>
+    <div style="padding:0 20px 100px">${tc}</div>
+    ${STATE.modal?'':`<button class="add-fab" onclick="setState({modal:'calc',calcExpr:'',calcDisp:'0'})">+</button>`}
     ${modalHtml}
   </div>`;
 
