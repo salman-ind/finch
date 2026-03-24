@@ -12,6 +12,8 @@
 <title>Finch</title>
 <link rel="manifest" href="data:application/manifest+json,{%22name%22:%22Finch%20Finance%22,%22short_name%22:%22Finch%22,%22start_url%22:%22.%22,%22display%22:%22standalone%22,%22background_color%22:%22%23ffffff%22,%22theme_color%22:%22%23ffffff%22,%22icons%22:[{%22src%22:%22data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20100%20100'%3E%3Crect%20width='100'%20height='100'%20rx='22'%20fill='%231a1a1a'/%3E%3Ctext%20y='.9em'%20font-size='72'%20x='12'%3E%F0%9F%90%A6%3C/text%3E%3C/svg%3E%22,%22sizes%22:%22any%22,%22type%22:%22image/svg+xml%22}]}">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<!-- Capacitor must load before inline script so Capacitor global exists at parse time -->
+<script src="capacitor.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
 /* ── Theme variables ────────────────────────────────────────── */
@@ -113,6 +115,28 @@ input  { font-family: inherit; -webkit-appearance: none; background: transparent
 </div>
 
 <script>
+// ── Google OAuth client IDs ────────────────────────────────────────
+// Web client ID — used by GIS on browser
+const GOOGLE_CLIENT_ID = '1038414051325-habm1j6beao0phpskkdbpqq9hej5cg63.apps.googleusercontent.com';
+
+// Android client ID — used for native PKCE flow
+// e.g. '123456789-abcdefgh.apps.googleusercontent.com'
+const GOOGLE_ANDROID_CLIENT_ID = '1038414051325-rirlceiajveevm0p7ah3o0lum0jmpcob.apps.googleusercontent.com';
+
+// Web client secret — needed for token exchange with web client type
+// Cloud Console → Web client → copy the client secret
+const GOOGLE_CLIENT_SECRET = 'YOUR_WEB_CLIENT_SECRET';
+// e.g. if client ID is '123456789-abcdefgh.apps.googleusercontent.com'
+// then REDIRECT_URI = 'com.googleusercontent.apps.123456789-abcdefgh:/oauth2redirect'
+// Extract the part before '.apps.googleusercontent.com' and reverse it:
+const GOOGLE_ANDROID_CLIENT_URI = (()=>{
+  const prefix = GOOGLE_ANDROID_CLIENT_ID.replace('.apps.googleusercontent.com','');
+  return 'com.googleusercontent.apps.' + prefix + ':/oauth2redirect';
+})();
+
+// ── Runtime detection ──────────────────────────────────────────────
+const isNative = () => typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform();
+
 // ── Emoji as JS unicode escapes (encoding-safe) ───────────────
 const EM = {
   food:'\uD83C\uDF7D', health:'\uD83D\uDC8A', utilities:'\u26A1',
@@ -134,12 +158,22 @@ const CATS = [
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const mkKey  = d  => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
 const localToday = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
-const fmtAmt = n  => '\u20AC' + Math.abs(n).toFixed(2);
+const ls     = { get:k=>{try{return localStorage.getItem(k)}catch(e){return null}}, set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}} };
 const getCat = id => CATS.find(c=>c.id===id)||CATS[8];
 const esc    = s  => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
 const mlabel = k  => { const [yr,mo]=k.split('-').map(Number); return `${MONTHS[mo-1]} ${yr}`; };
-const ls     = { get:k=>{try{return localStorage.getItem(k)}catch(e){return null}}, set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}} };
 const em     = id => EM[id]||EM.misc;
+const CURRENCIES = [
+  {code:'EUR', symbol:'\u20AC', name:'Euro'},
+  {code:'USD', symbol:'$',      name:'US Dollar'},
+  {code:'GBP', symbol:'\u00A3', name:'British Pound'},
+  {code:'JPY', symbol:'\u00A5', name:'Japanese Yen'},
+  {code:'CNY', symbol:'\u00A5', name:'Chinese Yuan'},
+  {code:'INR', symbol:'\u20B9', name:'Indian Rupee'},
+];
+let CURRENCY_CODE = ls.get('finch_currency') || 'EUR';
+const getCurrency = () => CURRENCIES.find(c=>c.code===CURRENCY_CODE) || CURRENCIES[0];
+const fmtAmt = n => getCurrency().symbol + Math.abs(n).toFixed(2);
 
 let DARK = ls.get('finch_dark')==='1';
 function applyTheme(){
@@ -151,117 +185,319 @@ function toggleDark(){
   DARK=!DARK; ls.set('finch_dark',DARK?'1':'0'); applyTheme(); render();
 }
 
+// Font scale: 0=Small(90%), 1=Default(100%), 2=Large(112%), 3=XL(125%)
+const FONT_STEPS = [
+  {label:'Small',   scale:0.90},
+  {label:'Default', scale:1.00},
+  {label:'Large',   scale:1.12},
+];
+let FONT_STEP = parseInt(ls.get('finch_font')||'1');
+function applyFontScale(){
+  const s = FONT_STEPS[FONT_STEP]?.scale || 1;
+  document.body.style.zoom = s;
+}
+function setFontStep(n){
+  FONT_STEP = Math.max(0, Math.min(3, n));
+  ls.set('finch_font', String(FONT_STEP));
+  applyFontScale();
+  render();
+}
+function setCurrency(code){
+  CURRENCY_CODE = code;
+  ls.set('finch_currency', code);
+  render();
+}
+
 let APP   = {budgets:{},transactions:[]};
-let SYNC  = {token:ls.get('finch_gh_token')||'',gistId:ls.get('finch_gh_gist')||'',status:'idle',lastSaved:null};
+let SYNC  = {
+  token:  ls.get('finch_gd_token')  || '',
+  fileId: ls.get('finch_gd_file')   || '',
+  expiry: parseInt(ls.get('finch_gd_expiry') || '0'),
+  status: 'idle',
+  lastSaved: null
+};
 let STATE = {
   curMonth:mkKey(new Date()),modal:null,
   amount:null,pendingCat:null,noteInput:'',dateInput:localToday(),
   editingId:null,
   viewTx:null,tab:'tx',
   budgetInput:'',calcExpr:'',calcDisp:'0',
-  tokenInput:'',setupError:'',setupLoading:false,dataMsg:'',
+  setupError:'',setupLoading:false,dataMsg:'',
 };
 let trendChart=null;
 
-// ── GitHub Gist ───────────────────────────────────────────────
-const GH='https://api.github.com',GDESC='Finch Finance Data',GFILE='finch-data.json';
-const ghH=()=>({'Authorization':`Bearer ${SYNC.token}`,'Content-Type':'application/json','Accept':'application/vnd.github+json'});
-async function ghFind(){
-  let page=1;
-  while(true){
-    const r=await fetch(`${GH}/gists?per_page=100&page=${page}`,{headers:ghH()});
-    if(!r.ok) throw new Error('Token invalid or missing gist scope.');
-    const list=await r.json();
-    const found=list.find(g=>g.description===GDESC);
-    if(found) return found.id;
-    if(list.length<100) return null;
-    page++;
+// ── Google Drive sync ─────────────────────────────────────────────
+const DRIVE_API    = 'https://www.googleapis.com/drive/v3';
+const DRIVE_UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
+const GD_FILE      = 'finch-data.json';
+const GD_SCOPE     = 'https://www.googleapis.com/auth/drive.appdata';
+
+// ── PKCE helpers ──────────────────────────────────────────────
+function pkceVerifier(){
+  const arr = new Uint8Array(64);
+  crypto.getRandomValues(arr);
+  return btoa(String.fromCharCode(...arr)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+async function pkceChallenge(verifier){
+  const data = new TextEncoder().encode(verifier);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return btoa(String.fromCharCode(...new Uint8Array(hash))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+
+// ── Web path: GIS token client ────────────────────────────────
+let tokenClient;
+
+function onGISReady(){
+  if(isNative()) return;
+  if(typeof google==='undefined') return;
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: GD_SCOPE,
+    callback: (resp) => {
+      if(resp.error){
+        setState({setupLoading:false, setupError:'Sign-in failed: '+(resp.error_description||resp.error)});
+        return;
+      }
+      onTokenReceived(resp.access_token, resp.expires_in);
+    },
+  });
+  if(SYNC.fileId && !(SYNC.token && SYNC.expiry > Date.now())){
+    tokenClient.requestAccessToken({prompt:'none'});
   }
 }
-async function ghCreate(){
-  const r=await fetch(`${GH}/gists`,{method:'POST',headers:ghH(),body:JSON.stringify({description:GDESC,public:false,files:{[GFILE]:{content:JSON.stringify(APP)}}})});
-  if(!r.ok) throw new Error('Failed to create gist.');
+
+// ── Shared token handler ──────────────────────────────────────
+async function onTokenReceived(accessToken, expiresInSeconds){
+  SYNC.token  = accessToken;
+  SYNC.expiry = Date.now() + ((expiresInSeconds||3600) - 60) * 1000;
+  ls.set('finch_gd_token',  SYNC.token);
+  ls.set('finch_gd_expiry', String(SYNC.expiry));
+
+  if(SYNC.fileId){
+    SYNC.status = 'synced';
+    if(STATE.setupLoading) setState({setupLoading:false, modal:null, setupError:''});
+    else render();
+    return;
+  }
+
+  try{
+    let fid = await driveFind();
+    if(fid){
+      SYNC.fileId = fid; ls.set('finch_gd_file', fid);
+      await driveLoad();
+    } else {
+      fid = await driveCreate();
+      SYNC.fileId = fid; ls.set('finch_gd_file', fid);
+    }
+    SYNC.status = 'synced';
+    setState({setupLoading:false, modal:null, setupError:''});
+  } catch(err){
+    setState({setupLoading:false, setupError:err.message||'Google Drive error.'});
+  }
+}
+
+// ── Native PKCE via @capacitor/browser + @capacitor/app ───────
+// Opens a Chrome Custom Tab (not a WebView — Google allows this).
+// Uses the Android OAuth client ID (public client, no secret needed).
+async function nativeOAuth2SignIn(){
+  const Browser = Capacitor.Plugins.Browser;
+  const App     = Capacitor.Plugins.App;
+  if(!Browser) throw new Error('Browser plugin not found');
+  if(!App)     throw new Error('App plugin not found');
+
+  const verifier   = pkceVerifier();
+  const challenge  = await pkceChallenge(verifier);
+
+  const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+    client_id:             GOOGLE_CLIENT_ID,
+    redirect_uri:          GOOGLE_ANDROID_CLIENT_URI,
+    response_type:         'code',
+    scope:                 GD_SCOPE,
+    code_challenge:        challenge,
+    code_challenge_method: 'S256',
+    prompt:                'consent',
+    access_type:           'online',
+  });
+
+  return new Promise(async (resolve, reject) => {
+    // Listen for the redirect URL coming back into the app
+    const handle = await App.addListener('appUrlOpen', async (event) => {
+      (await handle).remove();
+      try{
+        await Browser.close();
+        const url    = new URL(event.url);
+        const code   = url.searchParams.get('code');
+        const err    = url.searchParams.get('error');
+        if(err)   { reject(new Error(err)); return; }
+        if(!code) { reject(new Error('No auth code in redirect URL')); return; }
+
+        // Exchange code → token. Android clients are public — no client_secret.
+        const resp = await fetch('https://oauth2.googleapis.com/token', {
+          method:  'POST',
+          headers: {'Content-Type':'application/x-www-form-urlencoded'},
+          body:    new URLSearchParams({
+            code,
+            client_id:     GOOGLE_CLIENT_ID,
+            client_secret: GOOGLE_CLIENT_SECRET,
+            redirect_uri:  GOOGLE_ANDROID_CLIENT_URI,
+            grant_type:    'authorization_code',
+            code_verifier: verifier,
+          })
+        });
+        const data = await resp.json();
+        if(data.error) { reject(new Error(data.error_description||data.error)); return; }
+        resolve({ token: data.access_token, expiresIn: data.expires_in||3600 });
+      } catch(e){ reject(e); }
+    });
+
+    await Browser.open({ url: authUrl, windowName: '_self' });
+  });
+}
+
+// ── Main connect entry point ──────────────────────────────────
+async function connectGoogle(){
+  setState({setupLoading:true, setupError:''});
+  if(isNative()){
+    try{
+      const { token, expiresIn } = await nativeOAuth2SignIn();
+      await onTokenReceived(token, expiresIn);
+    } catch(err){
+      setState({setupLoading:false, setupError:'Sign-in failed: '+(err.message||String(err))});
+    }
+    return;
+  }
+  if(!tokenClient){
+    setState({setupLoading:false, setupError:'Google Sign-In not ready — try again in a moment.'});
+    return;
+  }
+  tokenClient.requestAccessToken({prompt:'consent'});
+}
+
+async function reconnectGoogle(){
+  if(isNative()){
+    try{
+      const { token, expiresIn } = await nativeOAuth2SignIn();
+      await onTokenReceived(token, expiresIn);
+    } catch(e){ render(); }
+    return;
+  }
+  if(tokenClient) tokenClient.requestAccessToken({prompt:'none'});
+}
+
+async function disconnectGoogle(){
+  if(SYNC.token){
+    try{ await fetch(`https://oauth2.googleapis.com/revoke?token=${SYNC.token}`,{method:'POST'}); }catch(e){}
+  }
+  ls.set('finch_gd_token',''); ls.set('finch_gd_file',''); ls.set('finch_gd_expiry','');
+  SYNC.token=''; SYNC.fileId=''; SYNC.expiry=0; SYNC.status='idle';
+  setState({modal:'data', dataMsg:'Disconnected from Google Drive.'});
+}
+
+// ── Drive REST helpers ────────────────────────────────────────
+async function driveFind(){
+  const r = await fetch(
+    `${DRIVE_API}/files?spaces=appDataFolder&q=name%3D'${GD_FILE}'&fields=files(id,name)`,
+    {headers:{Authorization:`Bearer ${SYNC.token}`}}
+  );
+  if(!r.ok) throw new Error('Drive search failed ('+r.status+').');
+  const d = await r.json();
+  return d.files?.[0]?.id || null;
+}
+
+async function driveCreate(){
+  const meta     = JSON.stringify({name:GD_FILE, parents:['appDataFolder']});
+  const content  = JSON.stringify(APP);
+  const boundary = 'finch_mp_boundary';
+  const body     = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${content}\r\n--${boundary}--`;
+  const r = await fetch(`${DRIVE_UPLOAD}/files?uploadType=multipart&fields=id`, {
+    method:'POST',
+    headers:{Authorization:`Bearer ${SYNC.token}`, 'Content-Type':`multipart/related; boundary=${boundary}`},
+    body
+  });
+  if(!r.ok) throw new Error('Failed to create Drive file ('+r.status+').');
   return (await r.json()).id;
 }
-async function ghLoad(){
-  const r=await fetch(`${GH}/gists/${SYNC.gistId}`,{headers:ghH()});
-  if(!r.ok) throw new Error('Failed to load.');
-  const raw=(await r.json()).files?.[GFILE]?.content;
-  if(raw){try{APP=JSON.parse(raw);}catch(e){}}
+
+async function driveLoad(){
+  const r = await fetch(`${DRIVE_API}/files/${SYNC.fileId}?alt=media`, {
+    headers:{Authorization:`Bearer ${SYNC.token}`}
+  });
+  if(!r.ok) throw new Error('Failed to load from Drive ('+r.status+').');
+  const raw = await r.json();
+  if(raw && Array.isArray(raw.transactions)){
+    APP = raw;
+    try{ls.set('finch_v2', JSON.stringify(APP));}catch(e){}
+  }
 }
-async function ghSave(){
-  SYNC.status='syncing';updateSyncDot();
+
+async function driveSave(){
+  SYNC.status='syncing'; updateSyncDot();
   try{
-    await fetch(`${GH}/gists/${SYNC.gistId}`,{method:'PATCH',headers:ghH(),body:JSON.stringify({files:{[GFILE]:{content:JSON.stringify(APP)}}})});
-    SYNC.status='synced';SYNC.lastSaved=new Date();
-  }catch(e){SYNC.status='error';}
+    const r = await fetch(`${DRIVE_UPLOAD}/files/${SYNC.fileId}?uploadType=media`, {
+      method:'PATCH',
+      headers:{Authorization:`Bearer ${SYNC.token}`, 'Content-Type':'application/json'},
+      body: JSON.stringify(APP)
+    });
+    if(!r.ok) throw new Error('Save failed ('+r.status+').');
+    SYNC.status='synced'; SYNC.lastSaved=new Date();
+  }catch(e){ SYNC.status='error'; }
   updateSyncDot();
 }
+
+async function forceSync(){
+  if(!SYNC.fileId){setState({dataMsg:'Not connected.'});return;}
+  if(!SYNC.token||SYNC.expiry<=Date.now()){setState({dataMsg:'Session expired — tap Reconnect.'});return;}
+  setState({dataMsg:'Syncing\u2026'}); await driveSave();
+  setState({dataMsg:'Synced!'}); setTimeout(()=>setState({dataMsg:''}),2000);
+}
+
+// ── Sync dot ──────────────────────────────────────────────────
 function updateSyncDot(){
-  const el=document.getElementById('sync-row');if(!el)return;
+  const el=document.getElementById('sync-row'); if(!el) return;
   if(SYNC.status==='syncing') el.innerHTML=`<span class="sync-dot syncing" style="background:#BA7517"></span><span style="font-size:12px;color:var(--text2)">Syncing&hellip;</span>`;
-  else if(SYNC.status==='synced') el.innerHTML=`<span class="sync-dot" style="background:#1D9E75"></span><span style="font-size:12px;color:var(--text2)">Saved to GitHub</span>`;
+  else if(SYNC.status==='synced') el.innerHTML=`<span class="sync-dot" style="background:#1D9E75"></span><span style="font-size:12px;color:var(--text2)">Saved to Drive</span>`;
   else if(SYNC.status==='error') el.innerHTML=`<span class="sync-dot" style="background:#E24B4A"></span><span style="font-size:12px;color:var(--danger)">Sync failed</span>`;
 }
+
+// ── Export / Import ───────────────────────────────────────────
 function exportBackup(){
   try{
     const b=new Blob([JSON.stringify(APP,null,2)],{type:'application/json'});
     const u=URL.createObjectURL(b);
     const a=document.createElement('a');
-    a.href=u;a.download='finch-backup.json';
-    document.body.appendChild(a);a.click();
-    document.body.removeChild(a);URL.revokeObjectURL(u);
+    a.href=u; a.download='finch-backup.json';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(u);
   }catch(e){alert('Export failed.');}
 }
 function triggerImport(){
-  const el=document.getElementById('imp-file');if(el)el.click();
+  const el=document.getElementById('imp-file'); if(el) el.click();
 }
 function handleImport(input){
-  if(!input.files||!input.files[0])return;
+  if(!input.files||!input.files[0]) return;
   const reader=new FileReader();
   reader.onload=async e=>{
     try{
       const data=JSON.parse(e.target.result);
       if(data&&Array.isArray(data.transactions)&&typeof data.budgets==='object'){
-        APP=data;await saveData();
+        APP=data; await saveData();
         setState({modal:'data',dataMsg:'Import successful! '+data.transactions.length+' transactions loaded.'});
       }else{alert('Invalid backup file.');}
     }catch(ex){alert('Failed to read file — make sure it is a valid Finch JSON backup.');}
   };
   reader.readAsText(input.files[0]);
 }
+
 async function saveData(){
   try{ls.set('finch_v2',JSON.stringify(APP));}catch(e){}
-  if(SYNC.token&&SYNC.gistId) ghSave();
-}
-async function connectGitHub(){
-  const tok=STATE.tokenInput.trim();
-  if(!tok){setState({setupError:'Please paste your token.'});return;}
-  setState({setupLoading:true,setupError:''});SYNC.token=tok;
-  try{
-    let gid=await ghFind();
-    if(gid){SYNC.gistId=gid;ls.set('finch_gh_gist',gid);await ghLoad();}
-    else{gid=await ghCreate();SYNC.gistId=gid;ls.set('finch_gh_gist',gid);}
-    ls.set('finch_gh_token',tok);SYNC.status='synced';
-    setState({setupLoading:false,modal:null,tokenInput:'',setupError:''});
-  }catch(err){setState({setupLoading:false,setupError:err.message||'Connection failed.'});}
-}
-async function disconnectGitHub(){
-  ls.set('finch_gh_token','');ls.set('finch_gh_gist','');
-  SYNC.token='';SYNC.gistId='';SYNC.status='idle';
-  setState({modal:'data',dataMsg:'Disconnected from GitHub.'});
-}
-async function forceSync(){
-  if(!SYNC.token||!SYNC.gistId){setState({dataMsg:'Not connected.'});return;}
-  setState({dataMsg:'Syncing\u2026'});await ghSave();
-  setState({dataMsg:'Synced!'});setTimeout(()=>setState({dataMsg:''}),2000);
+  if(SYNC.token && SYNC.fileId && SYNC.expiry > Date.now()) driveSave();
 }
 
 // ── State helpers ─────────────────────────────────────────────
 function setState(p){Object.assign(STATE,p);render();}
 function startEdit(id){
   const tx=APP.transactions.find(t=>t.id===id);
-  if(!tx)return;
+  if(!tx) return;
   setState({
     editingId:id, modal:'calc',
     amount:tx.amount, calcExpr:String(tx.amount), calcDisp:String(tx.amount),
@@ -279,18 +515,17 @@ function calcPress(v){
   else if(v==='='){
     try{const r=Function('"use strict";return('+e+')')();if(!isNaN(r)&&isFinite(r)){const rv=Math.round(r*100)/100;ne=String(rv);nd=String(rv);}}catch(ex){}
   } else if(ops.includes(v)){
-    if(!e)return;ne=ops.includes(e.slice(-1))?e.slice(0,-1)+v:e+v;nd=ne;
+    if(!e) return; ne=ops.includes(e.slice(-1))?e.slice(0,-1)+v:e+v; nd=ne;
   } else {
-    if(v==='.'){const pts=e.split(/[+\-*/]/);if(pts[pts.length-1].includes('.'))return;}
-    ne=e+v;nd=ne;
+    if(v==='.'){const pts=e.split(/[+\-*/]/);if(pts[pts.length-1].includes('.')) return;}
+    ne=e+v; nd=ne;
   }
-  STATE.calcExpr=ne;STATE.calcDisp=nd;
-  // Update only the display element — no full re-render, no flash
+  STATE.calcExpr=ne; STATE.calcDisp=nd;
   const el=document.getElementById('calc-disp');
-  if(el)el.textContent=nd;
+  if(el) el.textContent=nd;
 }
 function calcOk(){
-  let v;try{v=Function('"use strict";return('+STATE.calcExpr+')')();}catch(ex){v=parseFloat(STATE.calcDisp);}
+  let v; try{v=Function('"use strict";return('+STATE.calcExpr+')')();}catch(ex){v=parseFloat(STATE.calcDisp);}
   if(!isNaN(v)&&isFinite(v)&&v>0) setState({amount:Math.round(v*100)/100,modal:'cat',calcExpr:'',calcDisp:'0'});
 }
 function pickCat(id){setState({pendingCat:id,modal:'notes',noteInput:''});}
@@ -305,15 +540,15 @@ async function addTx(){
   } else {
     APP.transactions.push({id:String(Date.now()),amount:STATE.amount,category:STATE.pendingCat,date:STATE.dateInput,month:monthKey,ts:Date.now(),note:STATE.noteInput.trim()});
   }
-  await saveData();setState({modal:null,amount:null,pendingCat:null,noteInput:'',dateInput:localToday(),editingId:null,curMonth:monthKey,tab:'tx'});
+  await saveData(); setState({modal:null,amount:null,pendingCat:null,noteInput:'',dateInput:localToday(),editingId:null,curMonth:monthKey,tab:'tx'});
 }
 async function delTx(id){
   APP.transactions=APP.transactions.filter(t=>t.id!==id);
-  await saveData();setState({modal:null,viewTx:null});
+  await saveData(); setState({modal:null,viewTx:null});
 }
 async function setBudget(){
-  const v=parseFloat(STATE.budgetInput);if(isNaN(v)||v<=0)return;
-  APP.budgets[STATE.curMonth]=v;await saveData();setState({modal:null,budgetInput:''});
+  const v=parseFloat(STATE.budgetInput); if(isNaN(v)||v<=0) return;
+  APP.budgets[STATE.curMonth]=v; await saveData(); setState({modal:null,budgetInput:''});
 }
 function navMonth(d){const[yr,mo]=STATE.curMonth.split('-').map(Number);setState({curMonth:mkKey(new Date(yr,mo-1+d,1)),tab:'tx'});}
 function goToMonth(k){setState({curMonth:k,tab:'tx',modal:null});}
@@ -321,24 +556,16 @@ function getAllMonths(){const s=new Set();(APP.transactions||[]).forEach(t=>s.ad
 
 // ── Modals ────────────────────────────────────────────────────
 function mSetup(){return`
-  <div style="text-align:center;margin-bottom:22px">
-    <div class="serif" style="font-size:30px;font-weight:300;margin-bottom:5px">Connect GitHub</div>
-    <div style="font-size:15px;color:var(--text2)">Back up your data to a private GitHub Gist</div>
+  <div style="text-align:center;margin-bottom:24px">
+    <div style="font-size:40px;margin-bottom:10px">🔒</div>
+    <div class="serif" style="font-size:28px;font-weight:300;margin-bottom:6px">Connect Google Drive</div>
+    <div style="font-size:15px;color:var(--text2);line-height:1.5">Your data is backed up to a private <strong style="font-weight:500;color:var(--text)">App Data folder</strong> in your Google Drive &mdash; invisible in your Drive, only Finch can read it.</div>
   </div>
-  <div style="background:var(--bg2);border-radius:12px;padding:14px 16px;margin-bottom:18px;font-size:15px;color:var(--text2);line-height:1.8">
-    <strong style="font-weight:500;color:var(--text)">Get your token:</strong><br>
-    1. GitHub &rarr; Settings &rarr; Developer settings<br>
-    2. Personal access tokens &rarr; Tokens (classic)<br>
-    3. Generate new token &rarr; tick <code style="background:var(--bg3);padding:1px 6px;border-radius:4px;font-size:13px">gist</code> scope only<br>
-    4. Copy &amp; paste below
-  </div>
-  <input id="tok-in" type="password" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" oninput="STATE.tokenInput=this.value" onkeydown="if(event.key==='Enter')connectGitHub()"
-    style="width:100%;padding:12px 14px;border:0.5px solid var(--border2);border-radius:10px;font-size:16px;font-family:monospace;outline:none;margin-bottom:10px">
-  ${STATE.setupError?`<div style="color:var(--danger);font-size:15px;margin-bottom:10px;padding:10px 12px;background:var(--danger-bg);border-radius:8px">${esc(STATE.setupError)}</div>`:''}
-  <button class="primary-btn" onclick="connectGitHub()" ${STATE.setupLoading?'disabled':''} style="${STATE.setupLoading?'opacity:0.6':''}">
-    ${STATE.setupLoading?'Connecting&hellip;':'Connect to GitHub &rarr;'}
+  ${STATE.setupError?`<div style="color:var(--danger);font-size:15px;margin-bottom:14px;padding:10px 12px;background:var(--danger-bg);border-radius:8px">${esc(STATE.setupError)}</div>`:''}
+  <button class="primary-btn" onclick="connectGoogle()" ${STATE.setupLoading?'disabled':''} style="display:flex;align-items:center;justify-content:center;gap:10px;${STATE.setupLoading?'opacity:0.6':''}">
+    ${STATE.setupLoading?'Signing in&hellip;':`<svg width="18" height="18" viewBox="0 0 48 48" style="flex-shrink:0"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.2l6.7-6.7C35.7 2.4 30.2 0 24 0 14.7 0 6.8 5.5 3 13.5l7.8 6C12.7 13.3 17.9 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17z"/><path fill="#FBBC05" d="M10.8 28.5A14.6 14.6 0 0 1 9.5 24c0-1.6.3-3.1.8-4.5L2.5 13.5A23.9 23.9 0 0 0 0 24c0 3.8.9 7.4 2.5 10.5l8.3-6z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.5-5.8C29.7 38.5 27 39.5 24 39.5c-6.1 0-11.3-3.8-13.2-9l-7.8 6C6.8 44.5 14.7 48 24 48z"/></svg> Sign in with Google`}
   </button>
-  <button onclick="closeModal()" style="width:100%;padding:10px;background:none;border:none;color:var(--text3);font-size:15px;margin-top:6px;font-family:inherit">Skip for now</button>`;}
+  <button onclick="closeModal()" style="width:100%;padding:10px;background:none;border:none;color:var(--text3);font-size:15px;margin-top:8px;font-family:inherit">Skip for now</button>`;}
 
 function mCalc(){
   const grid=[
@@ -429,7 +656,7 @@ function mBudget(){
   return`<h2 class="serif" style="font-size:22px;font-weight:400;margin-bottom:4px">Set budget</h2>
   <p style="font-size:15px;color:var(--text2);margin-bottom:18px">${MONTHS[mo-1]} ${yr}</p>
   <div style="display:flex;align-items:baseline;gap:8px;border-bottom:0.5px solid var(--border2);padding-bottom:8px;margin-bottom:22px">
-    <span class="serif" style="font-size:28px;color:var(--text3)">&euro;</span>
+    <span class="serif" style="font-size:28px;color:var(--text3)">${getCurrency().symbol}</span>
     <input id="bud-in" type="number" inputmode="decimal" value="${STATE.budgetInput}" placeholder="0.00" oninput="STATE.budgetInput=this.value" onkeydown="if(event.key==='Enter')setBudget()"
       style="flex:1;font-size:30px;font-family:'Playfair Display',serif;font-weight:300;border:none;outline:none">
   </div>
@@ -455,11 +682,22 @@ function mView(){
   <button class="del-btn" onclick="delTx('${tx.id}')">Delete transaction</button>`;}
 
 function mData(){
-  const tc=(APP.transactions||[]).length,mc=Object.keys(APP.budgets||{}).length;
-  const connected=!!(SYNC.token&&SYNC.gistId);
-  const lastSaved=SYNC.lastSaved?SYNC.lastSaved.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):null;
+  const tc=(APP.transactions||[]).length, mc=Object.keys(APP.budgets||{}).length;
+  const tokenOk = !!(SYNC.token && SYNC.expiry > Date.now());
+  const connected = !!(tokenOk && SYNC.fileId);
+  const expired   = !!(SYNC.fileId && !tokenOk);
+  const lastSaved = SYNC.lastSaved ? SYNC.lastSaved.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : null;
+  const statusColor  = connected ? '#1D9E75' : expired ? '#BA7517' : '#888780';
+  const statusBg     = connected ? 'rgba(29,158,117,0.08)' : expired ? 'rgba(186,117,23,0.08)' : 'var(--bg2)';
+  const statusBorder = connected ? 'rgba(29,158,117,0.28)' : expired ? 'rgba(186,117,23,0.28)' : 'var(--border)';
+  const statusLabel  = connected ? 'Connected to Google Drive' : expired ? 'Session expired' : 'Local only';
+  const subLabel     = connected
+    ? `App folder &middot; ${tc} transactions &middot; ${mc} budgets${lastSaved?' &middot; last saved '+lastSaved:''}`
+    : expired
+    ? 'Your data is safe locally &mdash; tap Reconnect to re-enable sync'
+    : `${tc} transaction${tc!==1?'s':''} stored locally`;
   return`<h2 class="serif" style="font-size:22px;font-weight:400;margin-bottom:18px">Settings &amp; Sync</h2>
-  <div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg2);border-radius:12px;padding:14px 16px;margin-bottom:14px">
+  <div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg2);border-radius:12px;padding:14px 16px;margin-bottom:10px">
     <div>
       <div style="font-size:15px;font-weight:500">${DARK?'Dark mode':'Light mode'}</div>
       <div style="font-size:13px;color:var(--text3);margin-top:2px">App appearance</div>
@@ -468,18 +706,38 @@ function mData(){
       <span style="position:absolute;top:3px;left:${DARK?'24px':'3px'};width:24px;height:24px;border-radius:50%;background:#ffffff;transition:left 0.2s;display:block;box-shadow:0 1px 4px rgba(0,0,0,0.25)"></span>
     </button>
   </div>
-  <div style="background:${connected?'rgba(29,158,117,0.08)':'var(--bg2)'};border-radius:12px;padding:14px 16px;margin-bottom:14px;border:0.5px solid ${connected?'rgba(29,158,117,0.28)':'var(--border)'}">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-      <span class="sync-dot" style="background:${connected?'#1D9E75':'#888780'}"></span>
-      <span style="font-size:15px;font-weight:500">${connected?'Connected to GitHub Gist':'Local only'}</span>
+  <div style="background:var(--bg2);border-radius:12px;padding:14px 16px;margin-bottom:10px">
+    <div style="font-size:15px;font-weight:500;margin-bottom:10px">Text size</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+      ${FONT_STEPS.map((f,i)=>`
+        <button onclick="setFontStep(${i})" style="padding:9px 4px;border-radius:9px;border:1.5px solid ${FONT_STEP===i?'#1D9E75':'var(--border)'};background:${FONT_STEP===i?'rgba(29,158,117,0.10)':'none'};font-size:${11+i*1.5}px;font-weight:${FONT_STEP===i?'600':'400'};color:${FONT_STEP===i?'#1D9E75':'var(--text2)'};transition:all 0.1s">
+          ${f.label}
+        </button>`).join('')}
     </div>
-    <div style="font-size:14px;color:var(--text3)">${connected?`Private gist &middot; ${tc} transactions &middot; ${mc} budgets${lastSaved?' &middot; last saved '+lastSaved:''}`:(`${tc} transaction${tc!==1?'s':''} stored locally`)}</div>
+  </div>
+  <div style="background:var(--bg2);border-radius:12px;padding:14px 16px;margin-bottom:14px">
+    <div style="font-size:15px;font-weight:500;margin-bottom:10px">Currency</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+      ${CURRENCIES.map(c=>`
+        <button onclick="setCurrency('${c.code}')" style="padding:9px 6px;border-radius:9px;border:1.5px solid ${CURRENCY_CODE===c.code?'#1D9E75':'var(--border)'};background:${CURRENCY_CODE===c.code?'rgba(29,158,117,0.10)':'none'};font-size:13px;font-weight:${CURRENCY_CODE===c.code?'600':'400'};color:${CURRENCY_CODE===c.code?'#1D9E75':'var(--text2)'};text-align:center;line-height:1.3;transition:all 0.1s">
+          <div style="font-size:15px">${c.symbol}</div>
+          <div style="font-size:11px;opacity:0.8">${c.code}</div>
+        </button>`).join('')}
+    </div>
+  </div>
+  <div style="background:${statusBg};border-radius:12px;padding:14px 16px;margin-bottom:14px;border:0.5px solid ${statusBorder}">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <span class="sync-dot" style="background:${statusColor}"></span>
+      <span style="font-size:15px;font-weight:500">${statusLabel}</span>
+    </div>
+    <div style="font-size:14px;color:var(--text3)">${subLabel}</div>
   </div>
   ${STATE.dataMsg?`<div style="font-size:15px;color:var(--text2);margin-bottom:12px;padding:10px 12px;background:var(--bg2);border-radius:8px">${esc(STATE.dataMsg)}</div>`:''}
-  ${connected?`
+  ${(connected||expired)?`
     <button onclick="forceSync()" style="width:100%;padding:12px;border-radius:10px;border:0.5px solid var(--border2);background:none;font-size:16px;color:var(--text);margin-bottom:8px">Force sync now</button>
-    <button onclick="disconnectGitHub()" style="width:100%;padding:12px;border-radius:10px;border:0.5px solid var(--danger-bdr);background:var(--danger-bg);color:var(--danger);font-size:16px;margin-bottom:8px">Disconnect GitHub</button>
-  `:`<button onclick="setState({modal:'setup',tokenInput:'',setupError:'',setupLoading:false})" class="primary-btn" style="margin-bottom:8px">Connect to GitHub &rarr;</button>`}
+    ${expired?`<button onclick="reconnectGoogle()" class="primary-btn" style="margin-bottom:8px">Reconnect Google</button>`:''}
+    <button onclick="disconnectGoogle()" style="width:100%;padding:12px;border-radius:10px;border:0.5px solid var(--danger-bdr);background:var(--danger-bg);color:var(--danger);font-size:16px;margin-bottom:8px">Disconnect Google Drive</button>
+  `:`<button onclick="setState({modal:'setup',setupError:'',setupLoading:false})" class="primary-btn" style="margin-bottom:8px">Connect Google Drive &rarr;</button>`}
   <div style="border-top:0.5px solid var(--border);margin:10px 0 14px"></div>
   <div style="font-size:13px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px">Local backup</div>
   <button onclick="exportBackup()" style="width:100%;padding:12px;border-radius:10px;border:0.5px solid var(--border2);background:none;font-size:16px;color:var(--text);margin-bottom:8px">&darr; Export backup (JSON)</button>
@@ -570,10 +828,11 @@ function initTrend(){
   const spending=months.map(mk=>(APP.transactions||[]).filter(t=>t.month===mk).reduce((s,t)=>s+t.amount,0));
   const budgets=months.map(mk=>(APP.budgets||{})[mk]||null);
   const hasBudget=budgets.some(b=>b!==null);
+  const sym = getCurrency().symbol;
   const tc='rgba(0,0,0,0.30)',gc='rgba(0,0,0,0.05)';
   const ds=[{label:'Spending',data:spending,borderColor:'#D85A30',backgroundColor:'rgba(216,90,48,0.07)',tension:0.38,fill:true,pointBackgroundColor:'#D85A30',pointRadius:4,pointHoverRadius:6,borderWidth:2}];
   if(hasBudget) ds.push({label:'Budget',data:budgets,borderColor:'rgba(55,138,221,0.55)',borderDash:[5,4],tension:0,fill:false,pointRadius:3,pointBackgroundColor:'#378ADD',borderWidth:1.5,spanGaps:true});
-  try{trendChart=new Chart(cv,{type:'line',data:{labels,datasets:ds},options:{responsive:true,maintainAspectRatio:true,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`  ${c.dataset.label}: \u20AC${c.parsed.y.toFixed(2)}`}}},scales:{x:{grid:{color:gc},ticks:{color:tc,font:{size:13}}},y:{grid:{color:gc},ticks:{color:tc,font:{size:13},callback:v=>`\u20AC${v}`},beginAtZero:true}}}});}catch(e){}
+  try{trendChart=new Chart(cv,{type:'line',data:{labels,datasets:ds},options:{responsive:true,maintainAspectRatio:true,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`  ${c.dataset.label}: ${sym}${c.parsed.y.toFixed(2)}`}}},scales:{x:{grid:{color:gc},ticks:{color:tc,font:{size:13}}},y:{grid:{color:gc},ticks:{color:tc,font:{size:13},callback:v=>`${sym}${v}`},beginAtZero:true}}}});}catch(e){}
   const leg=document.getElementById('trend-leg');
   if(leg) leg.innerHTML=`<div style="display:flex;gap:20px;justify-content:center;font-size:14px;color:var(--text2)">
     <div style="display:flex;align-items:center;gap:6px"><div style="width:16px;height:2px;background:#D85A30;border-radius:1px"></div>Spending</div>
@@ -589,7 +848,9 @@ function render(){
   const left=budget-spent;
   const pct=budget>0?Math.min(100,spent/budget*100):0;
   const bc=left<0?'var(--danger)':pct>80?'#BA7517':'#1D9E75';
-  const connected=!!(SYNC.token&&SYNC.gistId);
+  const tokenOk = !!(SYNC.token && SYNC.expiry > Date.now());
+  const connected = !!(tokenOk && SYNC.fileId);
+  const expired   = !!(SYNC.fileId && !tokenOk);
   let inner='';
   if(STATE.modal==='setup')               inner=mSetup();
   else if(STATE.modal==='calc')           inner=mCalc();
@@ -624,8 +885,10 @@ function render(){
       </div>
       <div id="sync-row" style="display:flex;align-items:center;gap:4px;min-height:22px;margin-bottom:14px">
         ${connected
-          ?`<span class="sync-dot" style="background:#1D9E75"></span><span style="font-size:12px;color:var(--text2)">GitHub synced</span>`
-          :`<span style="font-size:12px;color:var(--text3);text-decoration:underline;text-underline-offset:2px;cursor:pointer" onclick="setState({modal:'setup',tokenInput:'',setupError:'',setupLoading:false})">Connect GitHub to back up your data &rarr;</span>`}
+          ?`<span class="sync-dot" style="background:#1D9E75"></span><span style="font-size:12px;color:var(--text2)">Google Drive synced</span>`
+          :expired
+          ?`<span class="sync-dot" style="background:#BA7517"></span><span style="font-size:12px;color:var(--text2);text-decoration:underline;text-underline-offset:2px;cursor:pointer" onclick="reconnectGoogle()">Drive session expired &mdash; tap to reconnect</span>`
+          :`<span style="font-size:12px;color:var(--text3);text-decoration:underline;text-underline-offset:2px;cursor:pointer" onclick="setState({modal:'setup',setupError:'',setupLoading:false})">Connect Google Drive to back up your data &rarr;</span>`}
       </div>
       <div style="background:var(--bg2);border-radius:14px;padding:18px;margin-bottom:14px">
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;${budget>0?'margin-bottom:14px':''}">
@@ -664,7 +927,6 @@ function render(){
 
   if(STATE.modal==='budget'){const el=document.getElementById('bud-in');if(el){el.focus();el.select();}}
   if(STATE.modal==='notes'){setTimeout(()=>{const el=document.getElementById('note-in');if(el)el.focus();},80);}
-  if(STATE.modal==='setup'){setTimeout(()=>{const el=document.getElementById('tok-in');if(el)el.focus();},80);}
   if(STATE.tab==='trends'){setTimeout(initTrend,80);}
 }
 
@@ -692,12 +954,19 @@ document.getElementById('banner-later').addEventListener('click',()=>{
 // ── Boot ──────────────────────────────────────────────────────
 async function boot(){
   applyTheme();
+  applyFontScale();
   const saved=ls.get('finch_v2');
   if(saved){try{APP=JSON.parse(saved);}catch(e){}}
-  if(SYNC.token&&SYNC.gistId){try{await ghLoad();SYNC.status='synced';}catch(e){SYNC.status='error';}}
+  // Try to load from Drive if we have a valid token
+  if(SYNC.token && SYNC.fileId && SYNC.expiry > Date.now()){
+    try{ await driveLoad(); SYNC.status='synced'; }catch(e){ SYNC.status='error'; }
+  }
   render();
 }
 boot();
 </script>
+
+<!-- Google Identity Services — web path only, no-op on Android -->
+<script src="https://accounts.google.com/gsi/client" onload="onGISReady()" async defer></script>
 </body>
 </html>
